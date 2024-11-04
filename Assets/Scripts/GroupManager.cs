@@ -13,6 +13,7 @@ public class GroupManager : MonoBehaviour
     [SerializeField] private Person instancePrefab;
     [SerializeField] private float spawnRadius = 6f;
     [SerializeField] private float minDistance = 1.2f;
+    [SerializeField] private GameObject randomExitPoint;
 
     public List<Transform> inLinePointList;
     public Transform exitPoint;
@@ -21,6 +22,7 @@ public class GroupManager : MonoBehaviour
     public List<Person> waitingPersonList = new List<Person>();
     public List<Person> walkingPersonList = new List<Person>();
     public List<Person> inLinePersonList = new List<Person>();
+    public List<Person> walkingExitingPersonList = new List<Person>();
     public List<Person> exitingPersonList = new List<Person>();
     public List<Person> determinedWalkingPersonList = new List<Person>();
     
@@ -58,12 +60,42 @@ public class GroupManager : MonoBehaviour
 
     }
 
-
     private void OnDestroy()
     {
         StopAllCoroutines();
     }
-
+    public void MoveToExitRandomPlace(Person instance)
+    {
+        var attempts = 0;
+        spawnRadius = 10;
+        minDistance = 2;
+        
+        while (attempts < 10)
+        {
+            var randomPos = exitPoint.transform.position + Random.insideUnitSphere * spawnRadius;
+            randomPos.y = exitPoint.transform.position.y;
+            
+            var canPlace = true;
+            foreach (Person existingInstance in exitingPersonList)
+            {
+                if (Vector3.Distance(randomPos, existingInstance.transform.position) < minDistance)
+                {
+                    canPlace = false;
+                    break;
+                }
+            }
+            if (canPlace)
+            {
+                randomExitPoint.transform.position = randomPos;
+                instance.SetDestination(randomExitPoint.transform);
+                exitingPersonList.Add(instance);
+                
+            }
+            attempts++;
+            
+            
+        }
+    }
     private void SpawnInstances()
     {
         var createdInstancesCount = 0;

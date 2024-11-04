@@ -54,7 +54,7 @@ public class Person : MonoBehaviour
 
     private void DetermineDestinationPoint() //X=2 Point
     {
-        if (GroupManager.Instance.exitingPersonList.Contains(this)) return;
+        if (GroupManager.Instance.walkingExitingPersonList.Contains(this)) return;
         
         if (Mathf.Abs(transform.position.x - GroupManager.Instance.inLinePointList
                 [GroupManager.Instance.inLinePersonList.Count + GroupManager.Instance.determinedWalkingPersonList.Count].position.x) < .2f && !_isDestDetermined)
@@ -100,12 +100,12 @@ public class Person : MonoBehaviour
     
     public void MoveInstanceToExit()
     {
-        SetDestination(GroupManager.Instance.exitPoint);
+        GroupManager.Instance.MoveToExitRandomPlace(this);
         
         if(GroupManager.Instance.inLinePersonList.Count > 0)
             GroupManager.Instance.inLinePersonList.Remove(this);
         
-        GroupManager.Instance.exitingPersonList.Add(this);
+        GroupManager.Instance.walkingExitingPersonList.Add(this);
 
         GroupManager.Instance.ShiftCustomersInLine();
 
