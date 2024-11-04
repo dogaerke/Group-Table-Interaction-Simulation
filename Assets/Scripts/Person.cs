@@ -8,18 +8,23 @@ using Random = UnityEngine.Random;
 
 public class Person : MonoBehaviour
 {
-    public event Action<Person> OnReach;
-    public event Action<Person> OnDestination;
-    public event Action<Person> OnInteract;
-
     [SerializeField] private NavMeshAgent agent;
-    public int speed;
+    public event Action<Person> OnReach;
+    public event Action<Person> OnExit;
     
+    public State state;
+    
+    private const float MaxDistanceToReach = 0.4f;
+    private const float MaxDistanceToSlowDown = 2.7f;
+    private const float MinSpeed = 2f;
+    private const float MaxSpeed = 11f;
+    private float _speed;
     private Transform _target;
-    private bool _isDestDetermined;
+    private Collider _collider;
 
     private void Start()
     {
+        _collider = GetComponent<Collider>();
         DetermineRandomSpeed();
         agent.isStopped = true;
     }
@@ -27,7 +32,22 @@ public class Person : MonoBehaviour
     private void Update()
     {
         IsPersonStopped();
-        DetermineDestinationPoint();
+        ControlAgentSpeeds();
+    }
+
+    private void ControlAgentSpeeds()       //When they get too close to each other, their speed decreases so that they do not collide,
+                                            //and when they get farther away, they return to their previous speed.
+    {
+        var hitColliders = Physics.OverlapSphere(transform.position, MaxDistanceToSlowDown);
+        foreach (var hitCollider in hitColliders)
+        {
+            if (hitCollider != _collider)
+            {
+                var distance = Vector3.Distance(transform.position, hitCollider.transform.position);
+                agent.speed = distance < MaxDistanceToSlowDown ? 
+                    Mathf.Lerp(MinSpeed, agent.speed, distance / MaxDistanceToSlowDown) : _speed;
+            }
+        }
     }
     
     private void IsPersonStopped()
@@ -39,76 +59,30 @@ public class Person : MonoBehaviour
         myPos.y = 0f;                           
         var targetPos = _target.position;
         targetPos.y = 0f;
-        if (Vector3.Distance(myPos, targetPos) < .2f)
+        if (Vector3.Distance(myPos, targetPos) < MaxDistanceToReach)
         {
             agent.isStopped = true;
             _target = null;
             OnReach?.Invoke(this);
-            
-            if(GroupManager.Instance.inLinePersonList.Count > 0 && this == GroupManager.Instance.inLinePersonList[0])
-                OnInteract?.Invoke(this);
         }
         
     }
     
-
-    private void DetermineDestinationPoint() //X=2 Point
+    public void InteractWithTable()
     {
-        if (GroupManager.Instance.walkingExitingPersonList.Contains(this)) return;
+        state = State.Interactıng;
         
-        if (Mathf.Abs(transform.position.x - GroupManager.Instance.inLinePointList
-                [GroupManager.Instance.inLinePersonList.Count + GroupManager.Instance.determinedWalkingPersonList.Count].position.x) < .2f && !_isDestDetermined)
+        StartCoroutine(WaitForSeconds(5f, () =>
         {
-            _isDestDetermined = true;
-            OnDestination?.Invoke(this);
-            Debug.Log("OnDestination invoked " + " transform.position.x is " + transform.position.x 
-                      + " inLinePersonList.Count " + GroupManager.Instance.inLinePersonList.Count);
-            
-        }
-    }
-    public void MoveInstanceToLine()
-    {
-        if (GroupManager.Instance.inLinePersonList.Count + GroupManager.Instance.walkingPersonList.Count + 
-         GroupManager.Instance.determinedWalkingPersonList.Count >= GroupManager.Instance.inLinePointList.Count) return;
+            OnExit?.Invoke(this);
+        }));
         
-        if(GroupManager.Instance.waitingPersonList.Count > 0)
-            GroupManager.Instance.waitingPersonList.Remove(this);
-        
-        SetDestination(GroupManager.Instance.inLinePointList[GroupManager.Instance.inLinePersonList.Count + GroupManager.Instance.determinedWalkingPersonList.Count]);
-                                                                                                                      
-        GroupManager.Instance.walkingPersonList.Add(this);
-        
-        OnDestination += SetDestinationPoint;
-
     }
     
-    private void SetDestinationPoint(Person instance)
+    private static IEnumerator WaitForSeconds(float t, Action onWaitEnd)
     {
-        OnDestination -= SetDestinationPoint;
-
-        GroupManager.Instance.determinedWalkingPersonList.Add(this);
-        
-        if(GroupManager.Instance.walkingPersonList.Count > 0)
-            GroupManager.Instance.walkingPersonList.Remove(this);
-        
-        SetDestination(GroupManager.Instance.inLinePointList
-            [GroupManager.Instance.inLinePersonList.Count + GroupManager.Instance.determinedWalkingPersonList.IndexOf(this)]);
-    
-        OnReach += GroupManager.Instance.AddInLine;
-
-    }
-    
-    public void MoveInstanceToExit()
-    {
-        GroupManager.Instance.MoveToExitRandomPlace(this);
-        
-        if(GroupManager.Instance.inLinePersonList.Count > 0)
-            GroupManager.Instance.inLinePersonList.Remove(this);
-        
-        GroupManager.Instance.walkingExitingPersonList.Add(this);
-
-        GroupManager.Instance.ShiftCustomersInLine();
-
+        yield return new WaitForSeconds(t);
+        onWaitEnd?.Invoke();
     }
     
     public void SetDestination(Transform target)
@@ -121,7 +95,16 @@ public class Person : MonoBehaviour
 
     private void DetermineRandomSpeed()
     {
-        speed = Random.Range(2, 11);
-        agent.speed = speed;
+        _speed = Random.Range(MinSpeed, MaxSpeed);
+        agent.speed = _speed;
     }
+}
+
+public enum State
+{
+    Default,
+    Walking,
+    Waitingline,
+    Interactıng,
+    Exiting,
 }

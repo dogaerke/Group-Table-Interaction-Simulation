@@ -1,187 +1,178 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEditor.ShaderKeywordFilter;
 using UnityEngine;
 using UnityEngine.Serialization;
+using UnityEngine.XR;
 using Random = UnityEngine.Random;
 
 public class GroupManager : MonoBehaviour
 {
     private int _randomNum;
-    
-    [SerializeField] private Person instancePrefab;
+
     [SerializeField] private float spawnRadius = 6f;
     [SerializeField] private float minDistance = 1.2f;
+    [SerializeField] private Transform destinationPoint;
+    [SerializeField] private Person instancePrefab;
     [SerializeField] private GameObject randomExitPoint;
 
-    public List<Transform> inLinePointList;
     public Transform exitPoint;
-    public Transform tablePoint;
-    
+    public List<Transform> inLinePointList;
     public List<Person> waitingPersonList = new List<Person>();
     public List<Person> walkingPersonList = new List<Person>();
     public List<Person> inLinePersonList = new List<Person>();
-    public List<Person> walkingExitingPersonList = new List<Person>();
     public List<Person> exitingPersonList = new List<Person>();
-    public List<Person> determinedWalkingPersonList = new List<Person>();
-    
+
     public int instanceCount = 30;
-    public bool isInCoroutine;
 
-    public static GroupManager Instance { get; private set; }
-
-    
-    private void Awake()
-    {
-        if (Instance != null && Instance != this)
-            Destroy(this);
-
-        else
-            Instance = this;
-    }
-    
     private void Start()
     {
         SpawnInstances();
-
     }
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Space) && waitingPersonList.Count > 0 && 
-            inLinePersonList.Count + walkingPersonList.Count + determinedWalkingPersonList.Count < inLinePointList.Count)
+        if (Input.GetKeyDown(KeyCode.Space) && waitingPersonList.Count > 0 &&
+            inLinePersonList.Count + walkingPersonList.Count < inLinePointList.Count)
         {
-            _randomNum = Random.Range(0, waitingPersonList.Count);  //Choose random person
-            
-            waitingPersonList[_randomNum].MoveInstanceToLine();
-            
-        }
+            _randomNum = Random.Range(0, waitingPersonList.Count); //Choose random instance
 
+            MoveInstanceToLine(waitingPersonList[_randomNum]);
+        }
     }
+
+    private void MoveInstanceToLine(Person instance)
+    {
+        instance.state = State.Walking;
+
+        if (waitingPersonList.Count > 0)
+            waitingPersonList.Remove(instance);
+        
+        if(!walkingPersonList.Contains(instance))
+            walkingPersonList.Add(instance);
+
+        instance.SetDestination(destinationPoint);
+    }
+
 
     private void OnDestroy()
     {
         StopAllCoroutines();
     }
-    public void MoveToExitRandomPlace(Person instance)
-    {
-        var attempts = 0;
-        spawnRadius = 10;
-        minDistance = 2;
-        
-        while (attempts < 10)
-        {
-            var randomPos = exitPoint.transform.position + Random.insideUnitSphere * spawnRadius;
-            randomPos.y = exitPoint.transform.position.y;
-            
-            var canPlace = true;
-            foreach (Person existingInstance in exitingPersonList)
-            {
-                if (Vector3.Distance(randomPos, existingInstance.transform.position) < minDistance)
-                {
-                    canPlace = false;
-                    break;
-                }
-            }
-            if (canPlace)
-            {
-                randomExitPoint.transform.position = randomPos;
-                instance.SetDestination(randomExitPoint.transform);
-                exitingPersonList.Add(instance);
-                
-            }
-            attempts++;
-            
-            
-        }
-    }
+
     private void SpawnInstances()
     {
         var createdInstancesCount = 0;
         var attempts = 0;
 
-        while (createdInstancesCount < instanceCount && attempts < instanceCount * 10)
+        while (createdInstancesCount < instanceCount && attempts < instanceCount * 15)
         {
             var randomPos = transform.position + Random.insideUnitSphere * spawnRadius;
             randomPos.y = transform.position.y;
-            
-            var canPlace = true;
-            
-            foreach (Transform existingInstance in transform)
-            {
-                if (Vector3.Distance(randomPos, existingInstance.position) < minDistance)
-                {
-                    canPlace = false;
-                    break;
-                }
-            }
-            
+
+            var canPlace = transform.Cast<Transform>().All(existingInstance => 
+                !(Vector3.Distance(randomPos, existingInstance.position) < minDistance));
+
             if (canPlace)
             {
                 var instance = Instantiate(instancePrefab, randomPos, Quaternion.identity, transform);
                 waitingPersonList.Add(instance);
-                
+
+                instance.OnReach += AddInLine;
+                instance.OnExit += HandleExit;
+
                 createdInstancesCount++;
             }
-            attempts++;
 
+            attempts++;
         }
-        
+
         if (createdInstancesCount < instanceCount)
-            Debug.LogWarning("There is not enough space in the circle!");
-        
+            Debug.LogWarning("There is not enough space in the spawn circle!");
     }
-    
-    public void AddInLine(Person instance)
+
+    private void AddInLine(Person instance)
     {
         instance.OnReach -= AddInLine;
-        
-        inLinePersonList.Add(instance);
-        
-        if(determinedWalkingPersonList.Count > 0)
-            determinedWalkingPersonList.Remove(instance);
-        
-        if (!isInCoroutine)
-            inLinePersonList[0].OnInteract += InteractWithTable;
+        instance.state = State.Waitingline;
 
+        if (walkingPersonList.Count > 0)
+            walkingPersonList.Remove(instance);
         
+        if(!inLinePersonList.Contains(instance))
+            inLinePersonList.Add(instance);
+        
+        if(inLinePersonList[0] == instance)
+            instance.InteractWithTable();
+            
+        ShiftCustomersInLine();
     }
-    
-    public void ShiftCustomersInLine()
+
+    private void ShiftCustomersInLine()  
     {
-        if(inLinePersonList.Count == 0) return;
+        if (inLinePersonList.Count == 0) return;
         
         var i = 0;
         foreach (var c in inLinePersonList)
         {
             c.SetDestination(inLinePointList[i++].transform);
         }
-        
-        if (!isInCoroutine)
-            inLinePersonList[0].OnInteract += InteractWithTable;
 
+        if(inLinePersonList.Count > 0)
+            inLinePersonList[0].InteractWithTable();
         
     }
-    
-    private void InteractWithTable(Person instance)
+
+    private void MoveToExitRandomPlace(Person instance)
     {
-        instance.OnReach -= InteractWithTable;
+        var attempts = 0;
+        var tryingCount = 0;
         
-        StartCoroutine(WaitForSeconds(5f, () =>
+        spawnRadius = 11f;
+        minDistance = 2.2f;
+        
+        while (attempts < 15)
         {
-            inLinePersonList[0].MoveInstanceToExit();
+            
+            var randomPos = exitPoint.transform.position + Random.insideUnitSphere * spawnRadius;
+            randomPos.y = exitPoint.transform.position.y;
+            
+            var canPlace = exitingPersonList.All(existingInstance => 
+                !(Vector3.Distance(randomPos, existingInstance.transform.position) < minDistance));
 
-        }));
+            if (canPlace)
+            {
+                randomExitPoint.transform.position = randomPos;
+                instance.SetDestination(randomExitPoint.transform);
+
+            }
+            else
+                tryingCount++;
+            
+            attempts++;
+            
+        }
+
+        if (tryingCount == attempts)
+            Debug.LogWarning("There is not enough space in the exit circle!");
         
     }
     
-    private IEnumerator WaitForSeconds(float t, Action onWaitEnd)
+    private void HandleExit(Person instance)
     {
-        isInCoroutine = true;
-        yield return new WaitForSeconds(t);
-        isInCoroutine = false;
-        onWaitEnd?.Invoke();
+        instance.OnExit -= HandleExit;
+        instance.state = State.Exiting;
+
+        MoveToExitRandomPlace(instance);
+
+        if (inLinePersonList.Count > 0)
+            inLinePersonList.Remove(instance);
+
+        if(!exitingPersonList.Contains(instance))
+            exitingPersonList.Add(instance);
+        
+        ShiftCustomersInLine();
     }
-    
 }

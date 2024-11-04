@@ -197,11 +197,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7858e889c2714dc438bc0f18677c952d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  instancePrefab: {fileID: 7091770808390768693, guid: b2e6d967775a633418959c36af6bd027,
-    type: 3}
   spawnRadius: 6
   minDistance: 1.2
+  destinationPoint: {fileID: 389962247}
+  instancePrefab: {fileID: 7091770808390768693, guid: b2e6d967775a633418959c36af6bd027,
+    type: 3}
   randomExitPoint: {fileID: 15800237}
+  exitPoint: {fileID: 2016819490}
   inLinePointList:
   - {fileID: 808126181}
   - {fileID: 425402211}
@@ -210,16 +212,11 @@ MonoBehaviour:
   - {fileID: 1656086201}
   - {fileID: 1381296343}
   - {fileID: 389962247}
-  exitPoint: {fileID: 2016819490}
-  tablePoint: {fileID: 1081757524}
   waitingPersonList: []
   walkingPersonList: []
   inLinePersonList: []
-  walkingExitingPersonList: []
   exitingPersonList: []
-  determinedWalkingPersonList: []
   instanceCount: 30
-  isInCoroutine: 0
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
